@@ -1,5 +1,6 @@
 #pragma once
-#include "bytes.h"
+#include "types/success.h"
+
 
 bool chk_passwd_set(const char* passwd_file);
 Success set_passwd(const char* prompt, const char* passwd_file);

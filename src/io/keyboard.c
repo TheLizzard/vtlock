@@ -1,33 +1,13 @@
 #include <sys/select.h>
-#include <sys/ioctl.h>
-#include <inttypes.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
 #include <fcntl.h>
 
+#include "../types/list.h"
 #include "keyboard.h"
-
-
-void cursor_move(int32_t row, int32_t col) {
-    printf("\x1b[%"PRIu32";%"PRIu32"H", row, col);
-    printf("\x1b[%"PRIu32";%"PRIu32"f", row, col);
-}
-
-void screen_clear_box(RowColPair top_left, RowColPair bottom_right) {
-    RowColPair termsize = screen_term_size();
-    for (int32_t row=top_left.row; row<=bottom_right.row; row++) {
-        if (row < 1) { continue; }
-        if (row > termsize.row) { break; }
-        cursor_move(row, top_left.col);
-        for (int32_t col=top_left.col; col<=bottom_right.col; col++) {
-            if (col < 1) { continue; }
-            if (col > termsize.col) { break; }
-            printf(" ");
-        }
-    }
-}
+#include "cursor.h"
 
 
 void keyboard_wait_for_enter(const char* prompt) {
@@ -38,31 +18,6 @@ void keyboard_wait_for_enter(const char* prompt) {
         if (ch == EOF) { puts(""); clearerr(stdin); break; }
         else if (ch == '\n') { break; }
     }
-}
-
-RowColPair screen_term_size() {
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-    return (RowColPair) {w.ws_row, w.ws_col};
-}
-
-
-TermSettings keyboard_no_echo() {
-    TermSettings oldt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    TermSettings newt = oldt;
-    newt.c_iflag &= (unsigned int) ~(IGNBRK | BRKINT | PARMRK | ISTRIP
-                                            | INLCR | IGNCR | ICRNL | IXON);
-    newt.c_oflag &= (unsigned int) ~OPOST;
-    newt.c_lflag &= (unsigned int) ~(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    newt.c_cflag &= (unsigned int) ~(CSIZE | PARENB);
-    newt.c_cflag |= CS8;
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-    return oldt;
-}
-
-void keyboard_yes_echo(TermSettings settings) {
-    tcsetattr(STDIN_FILENO, TCSANOW, &settings);
 }
 
 
@@ -92,19 +47,6 @@ bool keyboard_stdin_empty() {
 }
 
 
-#define INFINITE_STRING__BEGIN \
-    size_t size = 0; \
-    size_t buf_size = 10; \
-    uint8_t* buf = calloc(buf_size*sizeof(uint8_t), 1);
-#define INFINITE_STRING__RESIZE \
-    if (size+1 == buf_size) { \
-        buf_size *= 2; \
-        uint8_t* new_buf = calloc(buf_size*sizeof(uint8_t), 1); \
-        for (size_t i=0; i<size; i++) { new_buf[i] = buf[i]; } \
-        free(buf); \
-        buf = new_buf; \
-    }
-
 #define STDIN_NON_BLOCKING(func) { \
     int _tmp_flags = fcntl(STDIN_FILENO, F_GETFL, 0); \
     fcntl(STDIN_FILENO, F_SETFL, _tmp_flags|O_NONBLOCK); \
@@ -113,29 +55,28 @@ bool keyboard_stdin_empty() {
 }
 
 Bytes keyboard_flush_stdin() {
-    INFINITE_STRING__BEGIN
+    LIST_BEGIN(uint8_t, size, buf_size, buf, false)
     STDIN_NON_BLOCKING({
-        TermSettings settings = keyboard_no_echo();
+        TermSettings settings = cursor_no_echo();
         while (true) {
             int chr = getchar();
             if (chr == EOF) { break; }
             buf[size++] = (uint8_t) chr;
-            INFINITE_STRING__RESIZE
+            LIST_APPENDED(uint8_t, size, buf_size, buf, false)
         }
-        keyboard_yes_echo(settings);
+        cursor_yes_echo(settings);
     })
     return bytes_from_heap_data(buf, size);
 }
 
-Bytes keyboard_ask_passwd(const char* prompt) {
+String keyboard_ask_passwd(const char* prompt) {
     // Ignore everything in stdin up to now
     Bytes data = keyboard_flush_stdin();
     bytes_free(&data);
     // Set up some variables and print prompt
     size_t cursor = 0;
-    INFINITE_STRING__BEGIN
     printf("%s", prompt);
-    TermSettings settings = keyboard_no_echo();
+    TermSettings settings = cursor_no_echo();
 
     /*
     // https://www.xfree86.org/current/ctlseqs.html
@@ -173,6 +114,7 @@ Bytes keyboard_ask_passwd(const char* prompt) {
     Alt-<Key>      27 <Key>  # Where key is in [33,64], [91,96], [123,126]
     Alt-<Ctrl-Key> 27 <Ctrl-Key>
     */
+    LIST_BEGIN(uint8_t, size, capacity, passwd, true)
     bool done = false;
     while (!done) {
         // bool alt = false;
@@ -230,9 +172,9 @@ Bytes keyboard_ask_passwd(const char* prompt) {
                             if (cursor == size) { cursor_bell(); break; }
                             size--;
                             for (size_t i=cursor; i<size; i++) {
-                                buf[i] = buf[i+1];
+                                passwd[i] = passwd[i+1];
                             }
-                            buf[size] = 0;
+                            passwd[size] = 0;
                         } else {
                             _ignore_escape_seq();
                         }
@@ -261,22 +203,23 @@ Bytes keyboard_ask_passwd(const char* prompt) {
                 if (!cursor) { cursor_bell(); break; }
                 cursor--;
                 for (size_t i=cursor; i<size-1; i++) {
-                    buf[i] = buf[i+1];
+                    passwd[i] = passwd[i+1];
                 }
-                buf[size-1] = 0;
+                passwd[size-1] = 0;
                 size--;
                 break;
             default:
                 if (!iscntrl(ch)) { // Check not control character
                     size_t i = size;
                     while (true) {
-                        buf[i+1] = buf[i];
+                        passwd[i+1] = passwd[i];
                         if (i == 0) { break; }
                         if (i == cursor) { break; }
                         i--;
                     }
-                    buf[cursor++] = ch;
+                    passwd[cursor++] = ch;
                     size++;
+                    LIST_APPENDED(uint8_t, size, capacity, passwd, true)
                 }
                 break;
         }
@@ -284,13 +227,11 @@ Bytes keyboard_ask_passwd(const char* prompt) {
         // Display line
         printf("\x1b[2K\x1b[1K\r\x1b[0K\x1b[K\r%s", prompt);
         for (size_t i=0; i<size; i++) { printf("*"); }
-        // printf("%s", buf);
+        // printf("%s", passwd);
         if (size > cursor) { printf("\x1b[%luD", size-cursor); }
         fflush(stdout);
-
-        INFINITE_STRING__RESIZE
     }
-    keyboard_yes_echo(settings);
+    cursor_yes_echo(settings);
 
     // Clear line to hide password length
     printf("\x1b[2K\x1b[1K\r\x1b[0K\x1b[K\r" \
@@ -298,14 +239,8 @@ Bytes keyboard_ask_passwd(const char* prompt) {
     clearerr(stdin);
     fflush(stdout);
 
-    buf[size++] = '\0'; // Should already by NULL but why not
-    if (size > buf_size) {
-        fputs("FATAL: Stack corruption detected, aborting.\n", stderr);
-        fflush(stderr);
-        abort();
-    }
-
-    return bytes_from_heap_data(buf, size);
+    passwd[size++] = '\0';
+    return string_from_bytes(bytes_from_heap_data(passwd, size), ENCODING_UTF8);
 }
 
 

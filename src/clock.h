@@ -1,5 +1,6 @@
 #pragma once
-#include "bytes.h"
+#include "types/success.h"
+#include "io/screen.h"
 
 
 typedef uint8_t* Character;

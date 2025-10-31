@@ -17,6 +17,7 @@ This file was partially taken from
 
 #include "console_switch.h"
 
+
 typedef struct vt_mode VTMode;
 typedef struct sigaction Signal;
 typedef int Sig;

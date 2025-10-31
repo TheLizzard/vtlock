@@ -6,8 +6,9 @@
 #include <stdio.h>
 #include <ctype.h>
 
-#include "console_switch.h"
-#include "keyboard.h"
+#include "console/console_switch.h"
+#include "io/keyboard.h"
+#include "io/cursor.h"
 #include "passwd.h"
 #include "clock.h"
 
@@ -31,56 +32,20 @@
 #endif
 
 
-uint8_t count_first_zero(uint8_t number) {
-    /* Counts the number of leading set bits before the first zero bit */
-    for (uint8_t i=0; i<8; i++) {
-        if ((number & 1<<(7-i)) == 0) {
-            return i;
-        }
-    }
-    return 8;
-}
-
-size_t get_utf8_len(const uint8_t* data) {
-    size_t characters = 0;
-    for (size_t idx=0; data[idx]!='\x00'; idx++) {
-        characters++;
-        if ((data[idx] & 0b10000000) == 0) { // Top bit is 0
-            continue; // ASCII character
-        }
-        // Continuation character with no leading byte
-        if ((data[idx] & 0b11000000) != 0b11000000) {
-            continue;
-        }
-        // Read continuation bytes
-        uint8_t continuation_bytes = (uint8_t) (count_first_zero(data[idx])-1);
-        for (size_t j=0; j<continuation_bytes; j++) {
-            uint8_t chr = data[idx++];
-            if (chr == '\x00') { break; }
-            if ((chr & 0b11000000) != 0b10000000) {
-                // Invalid continuation byte
-                characters++;
-                break;
-            }
-        }
-    }
-    return characters;
-}
-
-
-// const char* UTF8_TESTS[] = {
-//     "",
-//     "#",  "a",  "~",  "^", "5",
-//     "£", "##", "66", "@@", "56",
-//     "░",  "▒",  "▓",  "█", "abc",
-//     "𒀃", "££", "%%%%", "£$$", "51*(",
-//     "£░", "█ab",
-//     NULL,
-// };
-
-
 #define str_eq(str1, str2) (!strcmp(str1, str2))
 #define str_startswith(str1, str2) (strncmp(str1, str2, strlen(str1)) == 0)
+
+// Argument macros
+#define MAIN_ADD_ARGUMENT_BEGIN \
+    const char* arg; \
+    uint8_t i = 1; \
+    while (i<argc) { \
+        arg = argv[i++];
+
+#define MAIN_ADD_ARGUMENT_END \
+        goto _main_unknown_arg; \
+        _main_arg_done: ; \
+    }
 
 #define MAIN_ADD_ARGUMENT_VALUE(argument_name, save_func) \
     if (str_startswith(argument_name, arg)) { \
@@ -111,8 +76,22 @@ size_t get_utf8_len(const uint8_t* data) {
         } \
     }
 
+// toint* functions
+#define toint(string) ({ \
+    int _tmp_result = 0; \
+    while (string[0] != '\x00') { \
+        _tmp_result *= 10; \
+        if ((string[0] < '0') || (string[0] > '9')) { \
+            goto _main_invalid_value; \
+        } \
+        _tmp_result += string[0] - '0'; \
+        string += sizeof(char); \
+    } \
+    _tmp_result; \
+})
+
 #define _toint(x, chk) ({ \
-    int _tmp_x_val = atoi(x); \
+    int _tmp_x_val = toint(x); \
     if (!(chk)) { goto _main_invalid_value; } \
     _tmp_x_val; \
 })
@@ -132,6 +111,8 @@ size_t get_utf8_len(const uint8_t* data) {
            (_tmp_x_val <= (max)) \
           )
 
+
+// Parsing fill helper
 #define _ARG_PARSE_SET_FILL(target) \
             { \
                 if (target == NULL) { \
@@ -141,7 +122,10 @@ size_t get_utf8_len(const uint8_t* data) {
                 if (val[0] == '\x00') { \
                     continue; \
                 } \
-                if (get_utf8_len((uint8_t*) val) != 1) { \
+                String val_str = string_from_charp(val, ENCODING_UTF8); \
+                size_t val_len = val_str.len; \
+                string_free(&val_str); \
+                if (val_len != 1) { \
                     error("%s must not be more than 1 character", arg); \
                     goto _main_bad; \
                     break; \
@@ -275,10 +259,7 @@ ExitCode main(int argc, const char** argv) {
     ExitCode exit_code = 0;
     // goto _main_usage_good; /* For debug */
 
-    const char* arg;
-    uint8_t i = 1;
-    while (i<argc) {
-        arg = argv[i++];
+    MAIN_ADD_ARGUMENT_BEGIN
 
         MAIN_ADD_ARGUMENT_VALUE("--pwdfile",
           {args->passwd_file = val;})
@@ -325,9 +306,8 @@ ExitCode main(int argc, const char** argv) {
         MAIN_ADD_ARGUMENT_FLAG("--no-clock",
           {args->clock_fill = NULL;})
 
-        goto _main_unknown_arg;
-        _main_arg_done: ;
-    }
+    MAIN_ADD_ARGUMENT_END
+
 
     // printf("__file__=!%s!\n", args->__file__);
     // printf("pwdfile=!%s!\n", args->passwd_file);
@@ -446,11 +426,13 @@ ExitCode actual_main(Args* args) {
                     colour = args->clock_colour;
                     fill = args->clock_fill;
                 }
-                // For tty without getty
+                // For initramfs tty (Control-C doesn't work)
                 for (size_t i=0; i<keypresses.len; i++) {
                     if (keypresses.data[i] == 3) { // Control-C
                         _not_pressed_ctrl_c = false;
-                    } else if (keypresses.data[i] == 27) { // \x1b
+                    } else if (keypresses.data[i] == 10) { // "\n"
+                        _not_pressed_ctrl_c = false;
+                    } else if (keypresses.data[i] == 27) { // "\x1b"
                         if (i+1 == keypresses.len) { // Last char => Esc
                             _not_pressed_ctrl_c = false;
                         } else if (keypresses.data[i+1] != 91) { // Escape
@@ -464,7 +446,7 @@ ExitCode actual_main(Args* args) {
             }
             cursor_move(1, 1);
             printf("\x1b[K\x1b[0K\x1b[2K");
-            printf(CYAN"Press [Control-C] to unlock. "RESET);
+            printf(CYAN"Press [Enter] to unlock. "RESET);
             fflush(stdout);
             sleep_milli(1000/args->clock_fps);
         }

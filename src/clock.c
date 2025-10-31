@@ -1,9 +1,10 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 
-#include "keyboard.h"
+#include "io/cursor.h"
 #include "clock.h"
 
 

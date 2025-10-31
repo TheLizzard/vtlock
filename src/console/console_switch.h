@@ -1,5 +1,6 @@
 #pragma once
-#include "bytes.h"
+#include "../types/success.h"
+
 
 Success lock_console_switch();
 Success unlock_console_switch();
