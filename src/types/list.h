@@ -46,5 +46,5 @@ Note that in the example, after the `buf[size++] = '\x00` there should be
         } \
     };
 
-// Size is in bytes (not very safe - look at list.c@list_safe_clear_mem)
+// Size is in bytes (look at comment above list.c@list_safe_clear_mem)
 Success list_safe_clear_mem(volatile void* mem, size_t size);

@@ -12,5 +12,4 @@ Compile with your favourite C compiler using:
 GCC command: `gcc $(find . -name '*.c') -std=c17 -D_POSIX_C_SOURCE=200809L -L/usr/lib/x86_64-linux-gnu -lssl -lcrypto`
 
 ### TODO:
-* Password isn't zeroed in memory after it's hashed (depending on the compiler's optimiser)
 * Check for memory leaks (hard since the leaks would be a few bytes long)
