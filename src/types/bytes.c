@@ -16,7 +16,7 @@ Bytes bytes_from_charp(const char* restrict data) {
     for (size_t i=0; i<len; i++) {
         new_buf[i] = (uint8_t) data[i];
     }
-    return (Bytes) {len, new_buf};
+    return bytes_from_heap_data(new_buf, len);
 }
 
 Bytes bytes_from_data(const uint8_t* restrict data, size_t len) {
@@ -24,7 +24,7 @@ Bytes bytes_from_data(const uint8_t* restrict data, size_t len) {
     uint8_t* new_buf = (uint8_t*) malloc(len*sizeof(uint8_t));
     if (new_buf == NULL) { return bytes_empty(); }
     for (size_t i=0; i<len; i++) { new_buf[i] = data[i]; }
-    return (Bytes) {len, new_buf};
+    return bytes_from_heap_data(new_buf, len);
 }
 
 Bytes bytes_from_heap_data(const uint8_t* data, size_t size) {
@@ -69,9 +69,9 @@ Bytes bytes_concat(const Bytes* restrict first, const Bytes* restrict second) {
             data[i] = first->data[i];
         }
         for (size_t i=0; i<second->len; i++) {
-            data[i+first->len] = first->data[i];
+            data[i+first->len] = second->data[i];
         }
-        return (Bytes) {len, data};
+        return bytes_from_heap_data(data, len);
     }
 }
 
@@ -80,7 +80,7 @@ Bytes bytes_copy(const Bytes* restrict other) {
     uint8_t* data = (uint8_t*) malloc(other->len*sizeof(uint8_t));
     if (data == NULL) { return bytes_empty(); }
     for (size_t i=0; i<other->len; i++) { data[i] = other->data[i]; }
-    return (Bytes) {other->len, data};
+    return bytes_from_heap_data(data, other->len);
 }
 
 void bytes_print(const Bytes* restrict data) {
@@ -108,5 +108,5 @@ Bytes bytes_file_read(FILE* file, size_t size, bool print_err) {
     if (print_err && (read_size != size)) {
         fprintf(stderr, FILE_READ_FAIL_MSG, read_size, size);
     }
-    return (Bytes) {read_size, data};
+    return bytes_from_heap_data(data, read_size);
 }

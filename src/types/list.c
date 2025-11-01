@@ -23,6 +23,13 @@ Success list_safe_clear_mem(volatile void* mem, size_t size) {
         barrier_data. The linked LLVM issue:
     * https://bugs.llvm.org/show_bug.cgi?id=15495#c11
         Talks about the difference between the `"g"` and `"r"` in `"+g"(p)`
+    * https://github.com/llvm/llvm-project/pull/83577/files
+        The implementation of `memset_explicit` in LLVM
+    * https://discourse.llvm.org/t/implement-memset-explicit/77312
+        More discussion on LLVM's `memset_explicit`
+    * https://elixir.bootlin.com/glibc/glibc-2.42.9000/
+                                    source/string/explicit_bzero.c
+        GNU's implementation of `explicit_bzero`
     */
     __asm__ __volatile__("" : "+g"(p) : : "memory");
     return true;

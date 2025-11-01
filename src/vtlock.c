@@ -448,7 +448,7 @@ ExitCode actual_main(Args* args) {
             printf("\x1b[K\x1b[0K\x1b[2K");
             printf(CYAN"Press [Enter] to unlock. "RESET);
             fflush(stdout);
-            sleep_milli(1000/args->clock_fps);
+            sleep_milli((unsigned int) 1000/args->clock_fps);
         }
 
         cursor_move(1, 1);

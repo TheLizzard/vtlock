@@ -30,20 +30,29 @@ bool chk_passwd(const char* prompt, const char* passwd_file) {
     String passwd = keyboard_ask_passwd(prompt);
 
     FILE* file = fopen(passwd_file, "rb");
-    if (file == NULL) { perror("Can't open password file"); return false; }
+    if (file == NULL) {
+        perror("Can't open password file");
+        string_free(&passwd);
+        return false;
+    }
 
     Bytes salt = bytes_file_read(file, SALT_SIZE, true);
     Bytes hash = bytes_file_read(file, HASH_SIZE, true);
-    if ((salt.len != SALT_SIZE) || (hash.len != HASH_SIZE)) { return false; }
+    if ((salt.len != SALT_SIZE) || (hash.len != HASH_SIZE)) {
+        string_free(&passwd);
+        bytes_free(&salt);
+        bytes_free(&hash);
+        return false;
+    }
     fclose(file);
 
     Bytes hash_try = hash_password(&salt, &passwd);
     Success success = bytes_eq(&hash, &hash_try);
     list_safe_clear_mem((void*) passwd.bytes.data, passwd.bytes.len);
+    bytes_free(&hash_try);
     string_free(&passwd);
     bytes_free(&salt);
     bytes_free(&hash);
-    bytes_free(&hash_try);
     return success;
 }
 
@@ -54,19 +63,26 @@ Success set_passwd(const char* prompt, const char* passwd_file) {
     if (salt.len == 0) {
         fprintf(stderr, "set_passwd failed\n");
         string_free(&passwd);
+        bytes_free(&salt);
         return false;
     }
 
     Bytes hash = hash_password(&salt, &passwd);
+    string_free(&passwd);
     if (hash.len == 0) {
         fprintf(stderr, "set_passwd failed\n");
-        string_free(&passwd);
+        bytes_free(&salt);
+        bytes_free(&hash);
         return false;
     }
-    string_free(&passwd);
 
     FILE* file = fopen(passwd_file, "wb");
-    if (file == NULL) { perror("fopen(<password file>) failed"); return false; }
+    if (file == NULL) {
+        perror("fopen(<password file>) failed");
+        bytes_free(&salt);
+        bytes_free(&hash);
+        return false;
+    }
 
     fwrite(salt.data, 1, SALT_SIZE, file);
     fwrite(hash.data, 1, HASH_SIZE, file);

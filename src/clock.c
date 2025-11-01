@@ -130,7 +130,7 @@ void display_number(RowColPair pos, Character chr, const char* ch0,
                     if (col > term_size.col) { break; } // Bounds
                     printf("%s", (row_data&_mask)?ch1:ch0);
                 }
-                row_data <<= 1;
+                row_data = (uint8_t) (row_data << 1);
             }
         }
     }
