@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
-#include <ctype.h>
 
 #include "console/console_switch.h"
 #include "io/keyboard.h"
@@ -216,20 +215,21 @@ void usage(Args* args) {
 
     printf("    "GREEN"--clock-colour"RESET"          : "
            "The colour of the clock (using ANSI escape codes) "
-           "(default: "GREEN"0"RESET" (\\x1b[0m))\n");
+           "(default: "GREEN"0"RESET" => \\x1b[0m)\n");
 
-    printf("    "GREEN"--clock-sleep-colour"RESET" : "
-           "Same as --clock-colour but when sleeping "
-           "(default: "GREEN"90"RESET" (\\x1b[90m))\n");
+    printf("    "GREEN"--clock-sleep-colour"RESET"    : "
+           "Same as "GREEN"--clock-colour"RESET" but when sleeping "
+           "(default: "GREEN"90"RESET" => \\x1b[90m)\n");
 
     printf("    "GREEN"--clock-sleep-time"RESET"      : "
-           "How long the clock should wait to switch from --clock-colour "
-           "to --clock-sleep-colour (in seconds) "
+           "How long the clock should wait to switch from "
+           GREEN"--clock-colour"RESET" to "GREEN"--clock-sleep-colour"RESET
+           " (in seconds) "
            "("GREEN"-1"RESET" means never sleep) "
            "(default: "GREEN"30"RESET")\n");
 
     printf("    "GREEN"--clock-sleep-fill"RESET"      : "
-           "The fill when sleeping. Same options as --clock-fill "
+           "The fill when sleeping. Same options as "GREEN"--clock-fill"RESET" "
            "(default: "GREEN"2"RESET")\n");
 
     printf("    "GREEN"-h"RESET" "GREEN"--help"RESET"               : "
@@ -352,7 +352,7 @@ ExitCode main(int argc, const char** argv) {
 
 
 bool _not_pressed_ctrl_c;
-void _pressed_ctrl_c(int) { _not_pressed_ctrl_c = false; }
+void _pressed_ctrl_c(int signo) { (void)signo; _not_pressed_ctrl_c = false; }
 
 void sleep_milli(unsigned int ms) {
     struct timespec ts;

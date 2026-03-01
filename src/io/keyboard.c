@@ -5,9 +5,11 @@
 #include <ctype.h>
 #include <fcntl.h>
 
+#include "../types/success.h"
 #include "../types/list.h"
 #include "keyboard.h"
 #include "cursor.h"
+#include "screen.h"
 
 
 void keyboard_wait_for_enter(const char* prompt) {
@@ -70,12 +72,13 @@ Bytes keyboard_flush_stdin() {
 }
 
 String keyboard_ask_passwd(const char* prompt) {
+    String prompt_str = string_from_charp(prompt, ENCODING_UTF8);
     // Ignore everything in stdin up to now
     Bytes data = keyboard_flush_stdin();
     bytes_free(&data);
     // Set up some variables and print prompt
     size_t cursor = 0;
-    printf("%s", prompt);
+    printf("%s", prompt_str.bytes.data);
     TermSettings settings = cursor_no_echo();
 
     /*
@@ -224,8 +227,18 @@ String keyboard_ask_passwd(const char* prompt) {
                 break;
         }
 
+        // Clear line (or lines if input long enough)
+        size_t term_cols = (size_t) screen_term_size().col;
+        size_t rows_to_clear = (prompt_str.len + size) / term_cols - \
+                              ((prompt_str.len + size) % term_cols <= 1) + 1;
+        // printf("\r%i %i\n\n", prompt_str.len + size, term_cols);
+        for (size_t i=0; i<rows_to_clear; i++) {
+            if (i != 0) { printf("\x1b[A"); }
+            printf("\x1b[2K\x1b[1K\r\x1b[0K\x1b[K\r");
+        }
+        // Display prompt
+        printf("%s", prompt_str.bytes.data);
         // Display line
-        printf("\x1b[2K\x1b[1K\r\x1b[0K\x1b[K\r%s", prompt);
         for (size_t i=0; i<size; i++) { printf("*"); }
         // printf("%s", passwd);
         if (size > cursor) { printf("\x1b[%luD", size-cursor); }
@@ -234,21 +247,27 @@ String keyboard_ask_passwd(const char* prompt) {
     cursor_yes_echo(settings);
 
     // Clear line to hide password length
-    printf("\x1b[2K\x1b[1K\r\x1b[0K\x1b[K\r" \
-           "                                        \r");
+    size_t term_cols = (size_t) screen_term_size().col;
+    for (size_t i=0; i<capacity-cursor; i++) { printf(" "); }
+    for (size_t i=0; i<(capacity/term_cols+1); i++) {
+        if (i != 0) { printf("\x1b[A"); }
+        printf("\x1b[2K\x1b[1K\r\x1b[0K\x1b[K\r");
+    }
     clearerr(stdin);
     fflush(stdout);
 
     passwd[size++] = '\0';
+    string_free(&prompt_str);
     return string_from_bytes(bytes_from_heap_data(passwd, size), ENCODING_UTF8);
 }
 
 
 /*
 int main() {
-    Bytes bytes = keyboard_ask_passwd("Prompt: ");
-    printf("Got length=%lu character/s (without null)\n", bytes.len-1);
-    printf("Got '%s'\n", bytes.data);
+    String string = keyboard_ask_passwd("Prompt: ");
+    printf("Got length=%lu character/s (without null)\n", string.len);
+    printf("Got '%s'\n", string.bytes.data);
+    string_free(&string);
     return 0;
 }
 // */

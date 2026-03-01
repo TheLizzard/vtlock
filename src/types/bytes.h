@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 // An immutable Bytes struct
-// Always check if bytes.data is NULL, as an error may have occured
+// Always check if bytes.data is NULL, as an error may have occurred
 // If bytes.len == 0, bytes.data will always be NULL
 typedef struct {
     const size_t len;
