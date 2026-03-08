@@ -5,6 +5,7 @@ ARCH        := $(shell dpkg --print-architecture)
 
 .ONESHELL:
 SHELL       := /bin/bash
+.SHELLFLAGS := -euo pipefail -c
 
 PREFIX      := /usr
 BINDIR      := $(PREFIX)/bin

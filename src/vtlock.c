@@ -163,8 +163,10 @@ typedef struct {
 
 void usage(Args* args) {
     printf("Usage: "GREEN"%s"RESET" "
+           "["GREEN"--help"RESET"] "
+           "["GREEN"--no-lock"RESET"] "
+           "["GREEN"--no-clock"RESET"] "
            "["GREEN"--pwdfile"RESET" <path>] "
-           "["GREEN"--no-time"RESET"] "
            "["GREEN"--clock-fill"RESET" <+ve integer>/<character>] "
            "["GREEN"--clock-font"RESET" <+ve integer>] "
            "["GREEN"--clock-row"RESET" <uinteger>] "
@@ -183,6 +185,11 @@ void usage(Args* args) {
 
     printf("    "GREEN"--no-clock"RESET"              : "
            "Disable the clock\n");
+
+    printf("    "GREEN"--no-lock"RESET"               : "
+           "Disables the locking and only shows screensaver. "
+           "Expects "GREEN"--pwdfile"RESET" and "GREEN"--no-clock"RESET" "
+           "to not be specified\n");
 
     printf("    "GREEN"--clock-font"RESET"            : "
            "The font to use for clock "
@@ -306,20 +313,24 @@ ExitCode main(int argc, const char** argv) {
         MAIN_ADD_ARGUMENT_FLAG("--no-clock",
           {args->clock_fill = NULL;})
 
+        MAIN_ADD_ARGUMENT_FLAG("--no-lock",
+          {args->passwd_file = NULL;})
+
     MAIN_ADD_ARGUMENT_END
 
 
-    // printf("__file__=!%s!\n", args->__file__);
-    // printf("pwdfile=!%s!\n", args->passwd_file);
-    // printf("clock-fill=!%s!\n", args->clock_fill);
-    // printf("clock-pos=!%i,%i!\n", args->clock_pos.row,
+    // printf("__file__='%s'\n", args->__file__);
+    // printf("pwdfile='%s'\n", args->passwd_file);
+    // printf("clock-fill='%s'\n", args->clock_fill);
+    // printf("clock-pos='%i,%i'\n", args->clock_pos.row,
     //                               args->clock_pos.col);
-    // printf("clock-font=!%i!\n", args->clock_font[0][0]);
-    // printf("clock-scale=!%u!\n", args->clock_scale);
-    // printf("clock-colour=!%u!\n", args->clock_colour);
-    // printf("clock-sleep-colour=!%u!\n", args->clock_sleep_colour);
-    // printf("clock-sleep-time=!%i!\n", args->clock_sleep_time);
-    // printf("clock-fps=!%u!\n", args->clock_fps);
+    // printf("clock-font='%i'\n", args->clock_font[0][0]);
+    // printf("clock-scale='%u'\n", args->clock_scale);
+    // printf("clock-colour='%u'\n", args->clock_colour);
+    // printf("clock-sleep-colour='%u'\n", args->clock_sleep_colour);
+    // printf("clock-sleep-time='%i'\n", args->clock_sleep_time);
+    // printf("clock-fps='%u'\n", args->clock_fps);
+    // goto _main_cleanup;
 
     exit_code = actual_main(args);
     goto _main_cleanup;
@@ -364,42 +375,45 @@ void sleep_milli(unsigned int ms) {
 
 // This is where the actual main code is:
 ExitCode actual_main(Args* args) {
-    // Password
-    if (!chk_passwd_set(args->passwd_file)) {
-        if (!set_passwd("New password: ", args->passwd_file)) {
-            error("Couldn't set password.\n"
-                  "Bailing out without locking.");
-            return 1;
-        }
+    bool _always_pressed_ctrl_c = false;
+    if (args->passwd_file != NULL) {
+        // Password
         if (!chk_passwd_set(args->passwd_file)) {
-            error("Set password worked but password still invalid.\n"
-                  "Bailing out without locking.");
-            return 2;
+            if (!set_passwd("New password: ", args->passwd_file)) {
+                error("Couldn't set password.\n"
+                      "Bailing out without locking.");
+                return 1;
+            }
+            if (!chk_passwd_set(args->passwd_file)) {
+                error("Set password worked but password still invalid.\n"
+                      "Bailing out without locking.");
+                return 2;
+            }
         }
-    }
-    puts(YELLOW"Make sure there are no background jobs on this tty."RESET);
-    puts(CYAN"To stop you from locking yourself out, please enter your " \
-         "password"RESET);
-    if (!chk_passwd("Unlock password: ", args->passwd_file)) {
-        error("Password incorrect.\n"
-              "Bailing out without locking.");
-        return 3;
-    }
+        puts(YELLOW"Make sure there are no background jobs on this tty."RESET);
+        puts(CYAN"To stop you from locking yourself out, please enter your " \
+             "password"RESET);
+        if (!chk_passwd("Unlock password: ", args->passwd_file)) {
+            error("Password incorrect.\n"
+                  "Bailing out without locking.");
+            return 3;
+        }
 
-    // Lock
-    if (!lock_console_switch()) {
-        error("Can't lock console switching.\n"
-              "Bailing out without locking.");
-        #if !defined(DEBUG)
-            return 4;
-        #endif
+        // Lock
+        if (!lock_console_switch()) {
+            error("Can't lock console switching.\n"
+                  "Bailing out without locking.");
+            #if !defined(DEBUG)
+                return 4;
+            #endif
+        }
+        if (!lock_signals()) {
+            error("Can't block signals.\n"
+                  "Bailing out without locking.");
+            return 5;
+        }
+        _always_pressed_ctrl_c = !set_signal(SIGINT, _pressed_ctrl_c);
     }
-    if (!lock_signals()) {
-        error("Can't block signals.\n"
-              "Bailing out without locking.");
-        return 5;
-    }
-    bool _always_pressed_ctrl_c = !set_signal(SIGINT, _pressed_ctrl_c);
 
     // Read loop
     ExitCode exit_code = 0;
@@ -450,9 +464,12 @@ ExitCode actual_main(Args* args) {
             fflush(stdout);
             sleep_milli((unsigned int) 1000/args->clock_fps);
         }
-
         cursor_move(1, 1);
         screen_clear();
+
+        // If no lock, just break
+        if (args->passwd_file == NULL) { break; }
+        // If lock, check password against file
         if (!chk_passwd_set(args->passwd_file)) {
             error("Password was set and working but now is invalid.\n"
                   "Bailing out after unlocking.");
@@ -470,12 +487,14 @@ ExitCode actual_main(Args* args) {
         printf(YELLOW"%i incorrect password tries."RESET"\n", incorrect_pwds);
     }
 
-    // Unlock
-    if (!unlock_console_switch()) {
-        error("Sorry, can't unlock console switching.\n"
-              "Good luck "GREEN":D"RED"\n"
-              "Continuing without unlocking.");
-        exit_code = 7;
+    if (args->passwd_file) {
+        // Unlock
+        if (!unlock_console_switch()) {
+            error("Sorry, can't unlock console switching.\n"
+                  "Good luck "GREEN":D"RED"\n"
+                  "Continuing without unlocking.");
+            exit_code = 7;
+        }
     }
     return exit_code;
 }
