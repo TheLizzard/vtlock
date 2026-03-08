@@ -1,5 +1,6 @@
 #pragma once
 #include <termios.h>
+#include <stdint.h>
 
 
 typedef struct termios TermSettings;

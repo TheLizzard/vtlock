@@ -44,3 +44,15 @@ Bytes bytes_from_random(size_t size) {
     }
     return output;
 }
+
+
+/*
+int main() {
+    // 307c00c28bddd59
+    Bytes bytes = bytes_from_data((uint8_t*) "Hello world", 10);
+    Bytes hashed = bytes_sha512(&bytes);
+    bytes_println(&hashed);
+    bytes_free(&bytes);
+    bytes_free(&hashed);
+}
+// */

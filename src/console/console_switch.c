@@ -23,8 +23,14 @@ typedef struct sigaction Signal;
 typedef int Sig;
 
 
-static void  no_vt_switch(Sig) { ioctl(0, VT_RELDISP,         0); }
-static void ack_vt_switch(Sig) { ioctl(0, VT_RELDISP, VT_ACKACQ); }
+static void  no_vt_switch(Sig sig) {
+    (void) sig;
+    ioctl(0, VT_RELDISP,         0);
+}
+static void ack_vt_switch(Sig sig) {
+    (void) sig;
+    ioctl(0, VT_RELDISP, VT_ACKACQ);
+}
 
 #define _new_signal(handler) ({ \
     Signal _tmp_signal; \

@@ -5,7 +5,6 @@
 #include <ctype.h>
 #include <fcntl.h>
 
-#include "../types/success.h"
 #include "../types/list.h"
 #include "keyboard.h"
 #include "cursor.h"

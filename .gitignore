@@ -1,2 +1,10 @@
+# Build files
+build/
+
+# Backup files
+*.swp
+.#*
+
+# Bismuth-184 folders
 **/c-flags
 **/c-libs

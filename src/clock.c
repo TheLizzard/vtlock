@@ -116,7 +116,7 @@ const char* ZERO_FILLS[] = {"0","1","2","3","4","5","6","7","8","9",":"};
 void display_number(RowColPair pos, Character chr, const char* ch0,
                     const char* ch1, uint8_t scale) {
     RowColPair term_size = screen_term_size();
-    uint8_t _mask = 1 << (chr[0]-1);
+    uint8_t _mask = (uint8_t) (1 << (chr[0]-1));
     for (uint8_t r=0; r<chr[1]; r++) {
         for (uint8_t rs=0; rs<scale; rs++) {
             uint8_t row_data = chr[r+2]; // [width height ...data]
