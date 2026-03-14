@@ -12,7 +12,7 @@ typedef enum {
 typedef struct {
     const Encoding encoding;
     const size_t len; /* Number of code points (without counting the NULL) */
-    const Bytes bytes; /* Always NULL terminated */
+    Bytes bytes; /* Always NULL terminated */
 } String;
 
 #define INVALID_SIZE ((size_t) -1)
@@ -27,6 +27,9 @@ We take control over the bytes. Don't free it
 String string_from_bytes(Bytes bytes, Encoding encoding);
 // The string object is no longer valid
 void string_free(String* str);
+Success string_secure_delete(String* string);
+Success string_secure_free(String* string); // Free only if successful delete
+void string_secure_free_force(String* string);
 // Assumes NULL terminated
 String string_from_charp(const char* data, const Encoding encoding);
 String string_concat(const String* str1, const String* str2);

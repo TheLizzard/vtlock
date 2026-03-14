@@ -1,8 +1,8 @@
 #include <stdio.h>
 
 #include "io/keyboard.h"
-#include "types/list.h" // For safe-ish clearing of data
 #include "hash/hash.h"
+#include "types/string.h"
 #include "passwd.h"
 
 
@@ -28,18 +28,19 @@ bool chk_passwd_set(const char* passwd_file) {
 
 bool chk_passwd(const char* prompt, const char* passwd_file) {
     String passwd = keyboard_ask_passwd(prompt);
+    if (passwd.len == INVALID_SIZE) { return false; }
 
     FILE* file = fopen(passwd_file, "rb");
     if (file == NULL) {
         perror("Can't open password file");
-        string_free(&passwd);
+        string_secure_free_force(&passwd);
         return false;
     }
 
     Bytes salt = bytes_file_read(file, SALT_SIZE, true);
     Bytes hash = bytes_file_read(file, HASH_SIZE, true);
     if ((salt.len != SALT_SIZE) || (hash.len != HASH_SIZE)) {
-        string_free(&passwd);
+        string_secure_free_force(&passwd);
         bytes_free(&salt);
         bytes_free(&hash);
         return false;
@@ -48,9 +49,8 @@ bool chk_passwd(const char* prompt, const char* passwd_file) {
 
     Bytes hash_try = hash_password(&salt, &passwd);
     Success success = bytes_eq(&hash, &hash_try);
-    list_safe_clear_mem((void*) passwd.bytes.data, passwd.bytes.len);
+    string_secure_free_force(&passwd);
     bytes_free(&hash_try);
-    string_free(&passwd);
     bytes_free(&salt);
     bytes_free(&hash);
     return success;
@@ -58,6 +58,7 @@ bool chk_passwd(const char* prompt, const char* passwd_file) {
 
 Success set_passwd(const char* prompt, const char* passwd_file) {
     String passwd = keyboard_ask_passwd(prompt);
+    if (passwd.len == INVALID_SIZE) { return false; }
 
     Bytes salt = bytes_from_random(SALT_SIZE);
     if (salt.len == 0) {

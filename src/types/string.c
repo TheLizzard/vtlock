@@ -77,7 +77,20 @@ String string_from_bytes(Bytes bytes, Encoding encoding) {
 }
 
 void string_free(String* str) {
-    bytes_free((Bytes*) &str->bytes);
+    bytes_free(&str->bytes);
+}
+
+Success string_secure_delete(String* string) {
+    return bytes_secure_delete(&string->bytes);
+}
+
+Success string_secure_free(String* string) {
+    if (string_secure_delete(string)) { string_free(string); return true; }
+    return false;
+}
+
+void string_secure_free_force(String* string) {
+    if (!string_secure_free(string)) { string_free(string); }
 }
 
 String string_concat(const String* str1, const String* str2) {
@@ -104,7 +117,7 @@ String string_concat(const String* str1, const String* str2) {
             Bytes bytes = bytes_from_heap_data(new_buf, new_buf_size);
             return (String) {str1->encoding, str1->len+str2->len, bytes};
         }
-        default:
+        default: /* Unknown encoding */
             break;
     }
     // Encoding not implemented or another error
@@ -220,7 +233,7 @@ uint32_t string_ord(const String* string, size_t start_idx, size_t end_idx) {
                 return INVALID_CODEPOINT;
             }
         }
-        default:
+        default: /* Unknown encoding */
             return INVALID_CODEPOINT;
     }
 }

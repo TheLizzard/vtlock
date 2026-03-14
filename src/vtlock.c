@@ -1,15 +1,15 @@
-#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <signal.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "console/console_switch.h"
 #include "io/keyboard.h"
 #include "io/cursor.h"
 #include "passwd.h"
-#include "clock.h"
+#include "time/clock_cli.h"
 
 
 // #define DEBUG
@@ -375,6 +375,18 @@ void sleep_milli(unsigned int ms) {
 
 // This is where the actual main code is:
 ExitCode actual_main(Args* args) {
+    // Check if we can lock/unlock console switching
+    if (!lock_console_switch()) {
+        error("Won't be able to lock\nBailing out without locking.");
+        return 1;
+    }
+    if (!unlock_console_switch()) {
+        error("While testing locking console switching, unlocking seems "
+              "to have failed. Good luck "GREEN":D"RED"\n"
+              "Bailing out without locking.");
+        return 2;
+    }
+
     bool _always_pressed_ctrl_c = false;
     if (args->passwd_file != NULL) {
         // Password
@@ -382,12 +394,12 @@ ExitCode actual_main(Args* args) {
             if (!set_passwd("New password: ", args->passwd_file)) {
                 error("Couldn't set password.\n"
                       "Bailing out without locking.");
-                return 1;
+                return 3;
             }
             if (!chk_passwd_set(args->passwd_file)) {
                 error("Set password worked but password still invalid.\n"
                       "Bailing out without locking.");
-                return 2;
+                return 4;
             }
         }
         puts(YELLOW"Make sure there are no background jobs on this tty."RESET);
@@ -396,7 +408,7 @@ ExitCode actual_main(Args* args) {
         if (!chk_passwd("Unlock password: ", args->passwd_file)) {
             error("Password incorrect.\n"
                   "Bailing out without locking.");
-            return 3;
+            return 5;
         }
 
         // Lock
@@ -404,13 +416,13 @@ ExitCode actual_main(Args* args) {
             error("Can't lock console switching.\n"
                   "Bailing out without locking.");
             #if !defined(DEBUG)
-                return 4;
+                return 6;
             #endif
         }
         if (!lock_signals()) {
             error("Can't block signals.\n"
                   "Bailing out without locking.");
-            return 5;
+            return 7;
         }
         _always_pressed_ctrl_c = !set_signal(SIGINT, _pressed_ctrl_c);
     }
@@ -473,13 +485,14 @@ ExitCode actual_main(Args* args) {
         if (!chk_passwd_set(args->passwd_file)) {
             error("Password was set and working but now is invalid.\n"
                   "Bailing out after unlocking.");
-            exit_code = 6;
+            exit_code = 8;
             break;
         }
         if (chk_passwd("Password: ", args->passwd_file)) { break; }
         incorrect_pwds++;
         error("Incorrect password!");
-        keyboard_wait_for_enter(YELLOW"Press [Enter] to try again. "RESET);
+        keyboard_wait_for_keypress(YELLOW"Press [Enter] to try again. "RESET,
+                                   '\n');
     }
 
     // Inform user of the number of incorrect password tries
@@ -493,7 +506,7 @@ ExitCode actual_main(Args* args) {
             error("Sorry, can't unlock console switching.\n"
                   "Good luck "GREEN":D"RED"\n"
                   "Continuing without unlocking.");
-            exit_code = 7;
+            exit_code = 9;
         }
     }
     return exit_code;

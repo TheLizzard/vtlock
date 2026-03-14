@@ -2,13 +2,13 @@
 #include <string.h>
 #include <stdint.h>
 
-#include "success.h"
+#include "secure_delete.h"
 
 
 // explicit_bzero isn't in the C specification
 // memset_s, memset_explicit aren't implemented by GNU C Library
 // So we have to use `memset`
-Success list_safe_clear_mem(volatile void* mem, size_t size) {
+Success mem_secure_delete(volatile void* mem, size_t size) {
     if ((size == 0) || (mem == NULL)) { return false; }
     volatile uint8_t* p = (volatile uint8_t*) mem;
     while (size--) { *p++ = 0; }

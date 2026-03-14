@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "success.h"
+
 // An immutable Bytes struct
 // Always check if bytes.data is NULL, as an error may have occurred
 // If bytes.len == 0, bytes.data will always be NULL
@@ -28,6 +30,9 @@ bool bytes_eq(const Bytes* restrict first, const Bytes* restrict second);
 Bytes bytes_copy(const Bytes* restrict other);
 // Free a bytes object. After this, the the object's data will be NULL
 void bytes_free(Bytes* restrict bytes);
+Success bytes_secure_delete(Bytes* bytes);
+Success bytes_secure_free(Bytes* bytes); // Free only if successful delete
+void bytes_secure_free_force(Bytes* bytes);
 // Concatonate 2 Bytes objects
 Bytes bytes_concat(const Bytes* restrict first, const Bytes* restrict second);
 // Print the data in a bytes object in hex

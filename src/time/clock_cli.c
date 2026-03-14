@@ -1,11 +1,10 @@
 #include <stdlib.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <time.h>
 
-#include "io/cursor.h"
-#include "clock.h"
+#include "../io/cursor.h"
+#include "clock_cli.h"
 
 
 // Each Character is a list of [width height ...data]

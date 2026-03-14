@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#include "secure_delete.h"
 #include "bytes.h"
 
 
@@ -39,6 +40,19 @@ void bytes_free(Bytes* restrict bytes) {
     if (bytes->data == NULL) { return; }
     free((void*) bytes->data);
     bytes->data = NULL;
+}
+
+Success bytes_secure_delete(Bytes* bytes) {
+    return mem_secure_delete((volatile void*) bytes->data, bytes->len);
+}
+
+Success bytes_secure_free(Bytes* bytes) {
+    if (bytes_secure_delete(bytes)) { bytes_free(bytes); return true; }
+    return false;
+}
+
+void bytes_secure_free_force(Bytes* bytes) {
+    if (!bytes_secure_free(bytes)) {  bytes_free(bytes); }
 }
 
 bool bytes_eq(const Bytes* restrict first, const Bytes* restrict second) {

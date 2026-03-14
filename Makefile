@@ -20,27 +20,51 @@ PKG_ROOT    := $(PKG_DIR)/$(TARGET)_$(VERSION)
 # Detect pkg-config
 PKG_CONFIG := $(shell command -v pkg-config 2>/dev/null)
 ifeq ($(PKG_CONFIG),)
-$(error pkg-config is required. Install it with: sudo apt install pkg-config)
+	$(error pkg-config is required. Install it with: sudo apt install pkg-config)
 endif
 
 
+# Colours
+RESET=\x1b[0m
+YELLOW=\x1b[33m
+GREY=\x1b[90m
+RED=\x1b[91m
+GREEN=\x1b[92m
+ORANGE=\x1b[93m
+PURPLE=\x1b[95m
+CYAN=\x1b[96m
+
+
 # Detect compiler
-CC := $(shell command -v clang >/dev/null 2>&1 && echo clang || echo gcc)
+CC := $(shell command -v clang >/dev/null 2>&1 && echo clang || \
+        (command -v gcc >/dev/null 2>&1 && echo gcc || \
+        (echo "Error: Can't find gcc or clang" && exit 1)))
 
 # Recursively find sources
 SRC := $(shell find src -type f -name '*.c')
-OBJ := $(patsubst ./%.c,$(BUILD_DIR)/%.o,$(SRC))
+OBJ := $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SRC))
 
 # Base flags
-BASE_CFLAGS := -pipe -Ofast -flto -march=native -mtune=native -fomit-frame-pointer \
-               -funroll-loops -funroll-all-loops -fstrict-aliasing \
-               -ffast-math -fno-math-errno -funsafe-math-optimizations \
-               -fno-trapping-math -freciprocal-math \
-               -finline-functions -finline-functions-called-once \
-               -fipa-pta -fgraphite -fdevirtualize -frename-registers \
-               -D_POSIX_C_SOURCE=200809L -std=c17
+BASE_CFLAGS := -pipe -std=c17 -D_POSIX_C_SOURCE=200809L
 
-# Clang warnings
+BASE_CFLAGS_OPTIMISATION := \
+-O3 -ffast-math -fomit-frame-pointer -funroll-loops -fno-math-errno \
+-fstrict-aliasing -funsafe-math-optimizations -freciprocal-math \
+-fno-trapping-math -finline-functions -fno-math-errno -ftree-vectorize \
+-fno-asynchronous-unwind-tables -fmerge-all-constants -fvisibility=hidden
+# cland flags
+CLANG_CFLAGS := \
+-flto=full -fno-common -ffunction-sections -fdata-sections -fvectorize \
+-fomit-frame-pointer -falign-functions
+# gcc flags
+GCC_CFLAGS := \
+-flto -fgraphite -fgraphite-identity -floop-nest-optimize -funroll-all-loops \
+-fipa-pta -fno-strict-aliasing -frename-registers -funswitch-loops -fivopts \
+-floop-block -floop-strip-mine -fno-common \
+-fno-trapping-math
+
+
+# clang warnings
 CLANG_WARN := \
 -Wall -Wextra -Wshadow -Wdangling-else -Wswitch-enum -Wformat-security \
 -Wconversion -Wpointer-arith -Wdouble-promotion -Wundef -Wfloat-equal \
@@ -48,28 +72,33 @@ CLANG_WARN := \
 -Wsometimes-uninitialized -Wcast-align -Wtautological-compare \
 -Wbitwise-instead-of-logical -Wshorten-64-to-32 -Wconditional-uninitialized \
 -Wdocumentation -Wreturn-stack-address -Wformat-pedantic \
--Wcovered-switch-default -Wimplicit-int-float-conversion -Wcomma
-
-# GCC warnings
+-Wimplicit-int-float-conversion -Wcomma
+# gcc warnings
 GCC_WARN := \
 -Wall -Walloc-zero -Warray-bounds -Wcast-align -Wconversion -Wdangling-else \
 -Wdouble-promotion -Wduplicated-branches -Wduplicated-cond -Wextra \
 -Wfloat-equal -Wformat-security -Wlogical-op -Wnull-dereference \
 -Wpointer-arith -Wshadow -Wswitch-enum -Wundef -Wuninitialized
 
-# Select warnings based on compiler
+
+# Select flags based on compiler
+CFLAGS := $(BASE_CFLAGS) $(BASE_CFLAGS_OPTIMISATION)
+CFLAGS_PP := $(PURPLE)$(BASE_CFLAGS)$(RESET) $(YELLOW)$(BASE_CFLAGS_OPTIMISATION)$(RESET)
 ifeq ($(CC),clang)
-WARNINGS := $(CLANG_WARN)
+	CFLAGS += $(CLANG_CFLAGS) $(CLANG_WARN)
+	CFLAGS_PP += $(ORANGE)$(CLANG_CFLAGS)$(RESET) $(GREY)$(CLANG_WARN)$(RESET)
 else
-WARNINGS := $(GCC_WARN)
-BASE_CFLAGS += -fgraphite -fgraphite-identity -floop-nest-optimize
+	CFLAGS += $(GCC_CFLAGS) $(GCC_WARN)
+	CFLAGS_PP += $(ORANGE)$(GCC_CFLAGS)$(RESET) $(GREY)$(GCC_WARN)$(RESET)
 endif
 
-CFLAGS := $(BASE_CFLAGS) $(WARNINGS)
 
 # Static linking
 LDFLAGS := -static -flto
 LDLIBS := -lssl -lcrypto -lz -lzstd -ldl -lpthread -lm
+
+# Ignore warnings about statically linking libcrypto
+EXCLUDE_WARNINGS = -e "statically linked applications" -e "libcrypto.a"
 
 
 define CONTROL_FILE
@@ -110,15 +139,20 @@ check-deps:
 	@pkg-config --exists libzstd || (echo "Missing dependency: libzstd-dev"; exit 1)
 	@pkg-config --exists openssl || (echo "Missing dependency: libssl-dev"; exit 1)
 
-build: check-deps $(BIN)
+build: check-deps print-compiler $(BIN)
+
+print-compiler:
+	@echo -e "$(CYAN)Using these $(GREEN)$(CC)$(CYAN) flags:$(RESET) $(CFLAGS_PP)"
 
 $(BIN): $(OBJ) metadata.json
 	@mkdir -p $(dir $@)
-	$(CC) $(LDFLAGS) $(OBJ) -o $@ $(LDLIBS) 2> >(grep -v "statically linked applications")
+	@echo -e "$(CYAN)Compiling into $(GREEN)$@$(RESET)"
+	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) -o $@ $(LDLIBS) 2> >(grep -v $(EXCLUDE_WARNINGS))
 
-$(BUILD_DIR)/%.o: %.c
+$(BUILD_DIR)/%.o: src/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	@echo -e "$(CYAN)Compiling: $(GREEN)$<$(RESET)"
+	$(CC) $(CFLAGS) $(LDFLAGS) -c $< -o $@
 
 clean:
 	@rm -rf $(BUILD_DIR) $(PKG_DIR) *.deb

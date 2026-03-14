@@ -1,7 +1,7 @@
 #pragma once
-#include <stddef.h>
+#include <stdlib.h>
 
-#include "success.h"
+#include "secure_delete.h"
 
 /*
 Takes in a "T" (eg. char)
@@ -41,12 +41,9 @@ Note that in the example, after the `buf[size++] = '\x00` there should be
             T* new_buffer = (T*) malloc(capacity*sizeof(T)); \
             for (size_t _i=0; _i<size; _i++) { new_buffer[_i] = buffer[_i]; } \
             if (clear_buffer) { \
-                list_safe_clear_mem((void*) buffer, old_capacity*sizeof(T)); \
+                mem_secure_delete((void*) buffer, old_capacity*sizeof(T)); \
             } \
             free(buffer); \
             buffer = new_buffer; \
         } \
     };
-
-// Size is in bytes (look at comment above list.c@list_safe_clear_mem)
-Success list_safe_clear_mem(volatile void* mem, size_t size);

@@ -11,13 +11,13 @@
 #include "screen.h"
 
 
-void keyboard_wait_for_enter(const char* prompt) {
+void keyboard_wait_for_keypress(const char* prompt, const char chr) {
     printf("%s", prompt);
     fflush(stdout);
     while (true) {
         int ch = getchar();
         if (ch == EOF) { puts(""); clearerr(stdin); break; }
-        else if (ch == '\n') { break; }
+        else if (ch == chr) { break; }
     }
 }
 
@@ -79,6 +79,7 @@ String keyboard_ask_passwd(const char* prompt) {
     size_t cursor = 0;
     printf("%s", prompt_str.bytes.data);
     TermSettings settings = cursor_no_echo();
+    bool no_output = false;
 
     /*
     // https://www.xfree86.org/current/ctlseqs.html
@@ -126,10 +127,16 @@ String keyboard_ask_passwd(const char* prompt) {
 
         switch (ch) {
             case 0:   // <Null>
-            case 4:   // <EOF> [Control-D]
             case 10:  // "\n"
             case 13:  // "\r" [Enter]
                 done = true;
+                break;
+            case 4:   // [Control-D]
+                if (size == 0) {
+                    no_output = true;
+                    done = true;
+                }
+                clearerr(stdin);
                 break;
             case 255: // Error (EOF on non-echo)
                 perror("getchar() failed");
@@ -211,6 +218,10 @@ String keyboard_ask_passwd(const char* prompt) {
                 size--;
                 break;
             default:
+                if (ch == 3) { // Ctrl-C
+                    no_output = true;
+                    done = true;
+                }
                 if (!iscntrl(ch)) { // Check not control character
                     size_t i = size;
                     while (true) {
@@ -257,7 +268,23 @@ String keyboard_ask_passwd(const char* prompt) {
 
     passwd[size++] = '\0';
     string_free(&prompt_str);
-    return string_from_bytes(bytes_from_heap_data(passwd, size), ENCODING_UTF8);
+
+    // Conver the uint8_t* into Bytes and String
+    Bytes passwd_bytes = bytes_from_heap_data(passwd, size);
+    String passwd_string = string_from_bytes(passwd_bytes, ENCODING_UTF8);
+    if (passwd_string.len == INVALID_SIZE) { no_output = true; }
+
+    if (no_output) {
+        bytes_secure_delete(&passwd_bytes);
+        if (passwd_string.len != INVALID_SIZE) {
+            string_free(&passwd_string);
+        } else {
+            bytes_free(&passwd_bytes);
+        }
+        return string_from_charp(NULL, ENCODING_UTF8);
+    }
+
+    return passwd_string;
 }
 
 
